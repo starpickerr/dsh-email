@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "stella-email-mcp"
+version = "1.0.0"
+description = "Independent local email MCP server"
+requires-python = ">=3.11"
+dependencies = ["mcp==1.30.0"]
+
+[project.scripts]
+email-mcp = "email_mcp.server:cli"
+
+[tool.setuptools.packages.find]
+include = ["email_mcp*"]
+
+[tool.setuptools.package-data]
+email_mcp = ["*.json", "*.sql"]
+
+[project.optional-dependencies]
+build = ["pyinstaller==6.22.3"]

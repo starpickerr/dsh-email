@@ -1,0 +1,71 @@
+{
+  "list_accounts": {
+    "read_only": true,
+    "params": []
+  },
+  "get_account": {
+    "read_only": true,
+    "params": [
+      "account_id"
+    ]
+  },
+  "list_sources": {
+    "read_only": true,
+    "params": []
+  },
+  "get_cursors": {
+    "read_only": true,
+    "params": [
+      "account_id"
+    ]
+  },
+  "test_connection": {
+    "read_only": true,
+    "params": [
+      "payload"
+    ]
+  },
+  "list_folders": {
+    "read_only": true,
+    "params": [
+      "account_id",
+      "payload"
+    ]
+  },
+  "fetch_messages": {
+    "read_only": true,
+    "params": [
+      "account_id",
+      "since",
+      "until",
+      "cursors",
+      "refresh_existing_content",
+      "lookback_days"
+    ]
+  },
+  "save_account": {
+    "read_only": false,
+    "params": [
+      "payload"
+    ]
+  },
+  "delete_account": {
+    "read_only": false,
+    "params": [
+      "account_id"
+    ]
+  },
+  "set_cursors": {
+    "read_only": false,
+    "params": [
+      "account_id",
+      "cursors"
+    ]
+  },
+  "reset_cursors": {
+    "read_only": false,
+    "params": [
+      "account_id"
+    ]
+  }
+}
