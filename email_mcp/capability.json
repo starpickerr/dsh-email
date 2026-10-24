@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "name": "email",
+  "description": {
+    "zh": "通过独立的邮件 MCP 服务管理邮箱连接、查询邮件来源并采集邮件。在配置中添加账号、选择采集范围和保存方式；使用前需要有效的邮箱连接。",
+    "en": "Use the independent Email MCP service to manage mailbox connections, inspect sources, and collect messages. Add accounts and choose collection scope and storage under Configuration; a valid mailbox connection is required."
+  }
+}

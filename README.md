@@ -1,5 +1,7 @@
 # email MCP
 
+The public capability introduction is maintained in `email_mcp/capability.json` and shipped as package data. Stella reads this metadata without importing or starting the server; bundled builds include it under `_internal/email_mcp/`.
+
 Independent, local stdio MCP server using the official Python SDK (`mcp==1.30.0`, MIT). No Stella import, Plugin Runtime or proprietary remote backend is required. Business code and state belong to this repository; extracted from Stella-Plugins f5eed89 without changing existing account, cursor, cookie or manifest formats.
 
 ```sh
