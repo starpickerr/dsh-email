@@ -25,6 +25,9 @@ DESCRIPTIONS = {
     "fetch_messages": "只读获取指定邮箱的邮件及建议游标；消费成功后才能提交游标，不自动标为已读。",
 }
 
+TOOL_TITLES = {'list_accounts': '查询邮箱账号', 'list_sources': '查询邮件来源',
+               'fetch_messages': '获取邮件'}
+
 
 def parameter_schema(name):
     if name in {"payload", "cursors"}:
@@ -55,6 +58,7 @@ def create_server(data_dir, legacy_dir=None, user_id="local-default"):
         return [
             Tool(
                 name=name,
+                title=TOOL_TITLES.get(name),
                 description=DESCRIPTIONS.get(name, f"Email: {name}"),
                 inputSchema={
                     "type": "object",
