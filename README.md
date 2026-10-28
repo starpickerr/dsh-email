@@ -15,3 +15,12 @@ Use Python 3.11 or newer. The optional `--legacy-dir` points to the former brief
 The server publishes ordinary MCP tools, with read-only annotations, strict argument names, structured results and protocol errors. Call `list_accounts` to inspect public settings. Credentials are masked. Configure accounts through `save_account`; settings operations are intended for the local owner. Stella excludes these management operations from Agent discovery and routes its authenticated settings/briefing through the same managed MCP connection. Stella keeps its execution permissions; independent clients must enforce their own policy.
 
 This server keeps multi-account IMAP compatibility and consumer-controlled checkpoints: fetching only proposes cursors, and `set_cursors` commits after successful consumption. IMAP SELECT remains read-only. Existing IMAP accounts are not silently switched to Gmail OAuth, SMTP, sending or message deletion. A Gmail-specific third-party MCP is not a drop-in replacement for these persisted IMAP/briefing contracts; adding provider backends can happen independently in this repository without duplicating mail business in Stella Core.
+
+Stella starts this server with `--hosted-connector`. In this mode the sandboxed
+process neither opens the account database nor receives passwords. Each tool
+call asks Core to complete the single pending operation through
+`stella/email/invoke`; the request carries only its parent request ID. Core owns
+the arguments, current resource checks, original SQLite/Keychain transaction and
+revocable IMAPS connection, and reuses the pinned mailbox business modules.
+This extension is specific to Stella; independent clients use the ordinary mode
+above and supply their own credential and transport policy.

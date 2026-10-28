@@ -83,9 +83,10 @@ class EmailService:
         legacy_mailbox_path: str | os.PathLike | None = None,
         opener: Optional[Callable[[], object]] = None,
         lookback_days: int = 2,
-        authorized_resources=None, user_id=None,
+        authorized_resources=None, user_id=None, credentials=None,
     ):
         self.authorized_resources, self.user_id = authorized_resources, user_id
+        self._credentials = credentials
         self.db_path = Path(db_path)
         self._opener = opener
         self._lookback_days = lookback_days
@@ -262,6 +263,9 @@ class EmailService:
 
     def save_account(self, payload: dict) -> dict:
         with _lock, self._connect() as db:
+            if self._credentials is not None:
+                db.execute('PRAGMA secure_delete=ON')
+                db.execute('BEGIN IMMEDIATE')
             settings = self._resolve(payload, db)
             rows = self._load_accounts(db)
             existing = self._selected(payload, rows)
@@ -270,32 +274,45 @@ class EmailService:
             if any(row["id"] != account_id and _mailbox_key(row) == key for row in rows):
                 raise ValueError("此邮箱和文件夹已经添加")
             saved = {"id": account_id, **settings}
-            if existing and existing["id"] != "environment":
-                db.execute(
-                    "UPDATE email_accounts SET enabled=?,host=?,user=?,password=?,port=?,folder=?,updated_at=?"
-                    " WHERE id=?",
-                    (1 if saved["enabled"] else 0, saved["host"], saved["user"], saved["password"],
-                     saved["port"], saved["folder"], _now(), account_id),
-                )
-            else:
-                # First write detaches from environment defaults (old file semantics).
-                persisted = [r for r in rows if r["id"] != "environment"]
-                if existing and existing["id"] == "environment":
-                    self._insert(db, saved, len(persisted))
+            def commit(password):
+                saved['password'] = password
+                if existing and db.execute('SELECT 1 FROM email_accounts WHERE id=?', (account_id,)).fetchone():
+                    db.execute(
+                        "UPDATE email_accounts SET enabled=?,host=?,user=?,password=?,port=?,folder=?,updated_at=?"
+                        " WHERE id=?",
+                        (1 if saved["enabled"] else 0, saved["host"], saved["user"], saved["password"],
+                         saved["port"], saved["folder"], _now(), account_id),
+                    )
                 else:
-                    position = db.execute("SELECT COALESCE(MAX(position),-1)+1 FROM email_accounts").fetchone()[0]
-                    self._insert(db, saved, position)
-            self._mark_initialized(db)
+                    # First write detaches from environment defaults (old file semantics).
+                    persisted = [r for r in rows if r["id"] != "environment"]
+                    if existing and existing["id"] == "environment":
+                        self._insert(db, saved, len(persisted))
+                    else:
+                        position = db.execute("SELECT COALESCE(MAX(position),-1)+1 FROM email_accounts").fetchone()[0]
+                        self._insert(db, saved, position)
+                self._mark_initialized(db)
+                if self._credentials is not None:
+                    db.commit()
+            if self._credentials is not None:
+                self._credentials.publish_account(db, existing, saved, commit)
+            else:
+                commit(settings['password'])
             return public_mailbox(saved)
 
     def delete_account(self, account_id: str) -> dict:
         if not isinstance(account_id, str) or not account_id:
             raise ValueError("邮箱 ID 无效")
         with _lock, self._connect() as db:
+            if self._credentials is not None:
+                db.execute('PRAGMA secure_delete=ON')
+                db.execute('BEGIN IMMEDIATE')
             rows = self._load_accounts(db)
             existing = self._selected({"id": account_id}, rows)
             db.execute("DELETE FROM email_accounts WHERE id=?", (existing["id"],))
             self._mark_initialized(db)
+            if self._credentials is not None:
+                self._credentials.remove_account(existing, db.commit)
         return {"deleted": True, "id": existing["id"]}
 
     # ----- connection --------------------------------------------------
