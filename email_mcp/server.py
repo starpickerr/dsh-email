@@ -1,6 +1,9 @@
 """Independent local MCP server. Run with --data-dir and optional --legacy-dir."""
 
 import argparse
+import imaplib
+import socket
+import ssl
 import asyncio
 import json
 import inspect
@@ -52,11 +55,39 @@ def parameter_schema(name):
     )
 
 
-def create_server(data_dir, legacy_dir=None, user_id="local-default", *, hosted_connector=False):
+def connection_error_code(error):
+    # Connector exceptions wrap socket/IMAP errors; never publish exception text.
+    for _ in range(4):
+        cause = error.__cause__ or error.__context__
+        if cause is None or cause is error:
+            break
+        error = cause
+    for kind, code in (
+        (socket.gaierror, 'dns_error'), (ssl.SSLError, 'tls_error'),
+        (TimeoutError, 'timeout'), (ConnectionRefusedError, 'connection_refused'),
+        (imaplib.IMAP4.abort, 'connection_lost'), (imaplib.IMAP4.error, 'auth_failed'),
+        (PermissionError, 'permission_denied'), (OSError, 'network_error'),
+        (KeyError, 'account_unavailable'), (ValueError, 'invalid_config'),
+    ):
+        if isinstance(error, kind):
+            return code
+    return 'query_failed'
+
+
+def create_server(data_dir, legacy_dir=None, user_id="local-default", *, hosted_connector=False, dsh_credentials=False):
+    if dsh_credentials and (hosted_connector or legacy_dir is not None):
+        raise ValueError('DSH 凭据模式不读取旧账号或使用旧 Core 连接。')
     data_dir = Path(data_dir).expanduser().resolve()
     if not hosted_connector:
         data_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
     methods = json.loads(Path(__file__).with_name("methods.json").read_text())
+    dsh_accounts = None
+    if dsh_credentials:
+        from .dsh_credentials import DshEmailService
+        dsh_accounts = DshEmailService.from_environment(data_dir / 'email.db').accounts
+        methods = {name: spec for name, spec in methods.items() if name in {
+            'list_accounts', 'list_sources', 'get_cursors', 'fetch_messages', 'test_connection', 'list_folders'}}
+        methods['list_folders'] = {**methods['list_folders'], 'params': ['account_id']}
     server = Server("email", version=__version__)
 
     @server.list_tools()
@@ -128,12 +159,12 @@ def create_server(data_dir, legacy_dir=None, user_id="local-default", *, hosted_
         cancel = threading.Event()
 
         def invoke():
-            service = EmailService(
-                data_dir / "email.db",
-                legacy_mailbox_path=legacy_dir / "mailbox.json" if legacy_dir else None,
-                user_id=user_id,
-                authorized_resources=resources,
-            )
+            if dsh_credentials:
+                service = DshEmailService(data_dir / 'email.db', dsh_accounts, user_id=user_id, authorized_resources=resources)
+            else:
+                service = EmailService(data_dir / "email.db",
+                    legacy_mailbox_path=legacy_dir / "mailbox.json" if legacy_dir else None,
+                    user_id=user_id, authorized_resources=resources)
             value = getattr(service, name)(**arguments)
             return {"value": value}
 
@@ -145,6 +176,14 @@ def create_server(data_dir, legacy_dir=None, user_id="local-default", *, hosted_
                 ],
                 structuredContent=value,
             )
+        except Exception as error:
+            cancel.set()
+            if not dsh_credentials:
+                raise
+            if name == 'test_connection':
+                value = {'value': {'connected': False, 'folder_accessible': False, 'error_code': connection_error_code(error)}}
+                return CallToolResult(content=[TextContent(type='text', text=json.dumps(value))], structuredContent=value)
+            return CallToolResult(isError=True, content=[TextContent(type='text', text='邮件查询失败，请检查 DSH 邮件插件中的账号、授权码、IMAP 权限和网络。')])
         except BaseException:
             cancel.set()
             raise
@@ -158,8 +197,9 @@ async def main():
     parser.add_argument("--legacy-dir", type=Path)
     parser.add_argument("--user-id", default="local-default")
     parser.add_argument('--hosted-connector', action='store_true')
+    parser.add_argument('--dsh-credentials', action='store_true')
     args = parser.parse_args()
-    server = create_server(args.data_dir, args.legacy_dir, args.user_id, hosted_connector=args.hosted_connector)
+    server = create_server(args.data_dir, args.legacy_dir, args.user_id, hosted_connector=args.hosted_connector, dsh_credentials=args.dsh_credentials)
     async with stdio_server() as (read, write):
         await server.run(read, write, server.create_initialization_options())
 
