@@ -16,6 +16,14 @@ The server publishes ordinary MCP tools, with read-only annotations, strict argu
 
 This server keeps multi-account IMAP compatibility and consumer-controlled checkpoints: fetching only proposes cursors, and `set_cursors` commits after successful consumption. IMAP SELECT remains read-only. Existing IMAP accounts are not silently switched to Gmail OAuth, SMTP, sending or message deletion. A Gmail-specific third-party MCP is not a drop-in replacement for these persisted IMAP/briefing contracts; adding provider backends can happen independently in this repository without duplicating mail business in Stella Core.
 
+## DSH native credentials
+
+The independently installable `@stella/mail` bundle starts this server with `--dsh-credentials`. DSH owns a native `stella-email/accounts` credential record; the transient `STELLA_EMAIL_CREDENTIAL` environment entry is removed immediately after parsing. This mode ignores legacy database accounts, legacy migration arguments and IMAP environment defaults. Only cursor data is persisted here. No Keychain provider is accessed or changed.
+
+This mode exposes six read-only tools: `list_accounts`, `list_sources`, `get_cursors`, `fetch_messages`, `test_connection` and `list_folders`. Connection tests accept only an existing account ID; mailbox management and cursor writes are not published. The briefing consumer supplies and commits its own checkpoints. Ordinary standalone mode and hosted compatibility remain available, but cannot be combined with DSH credential mode.
+
+Configure accounts in the DSH plugin settings, then explicitly authorize Stella conversation tools or select briefing sources. Installing or saving accounts does not fetch message bodies. Validation: `.venv/bin/python -B -m unittest tests.test_dsh_credentials -v`; synthetic accounts only.
+
 Stella starts this server with `--hosted-connector`. In this mode the sandboxed
 process neither opens the account database nor receives passwords. Each tool
 call asks Core to complete the single pending operation through
