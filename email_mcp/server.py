@@ -75,6 +75,9 @@ def connection_error_code(error):
 
 
 def create_server(data_dir, legacy_dir=None, user_id="local-default", *, hosted_connector=False, dsh_credentials=False):
+    if dsh_credentials:
+        from .dsh_credentials import take_environment
+        raw_credentials = take_environment()
     if dsh_credentials and (hosted_connector or legacy_dir is not None):
         raise ValueError('DSH 凭据模式不读取旧账号或使用旧 Core 连接。')
     data_dir = Path(data_dir).expanduser().resolve()
@@ -84,7 +87,7 @@ def create_server(data_dir, legacy_dir=None, user_id="local-default", *, hosted_
     dsh_accounts = None
     if dsh_credentials:
         from .dsh_credentials import DshEmailService
-        dsh_accounts = DshEmailService.from_environment(data_dir / 'email.db').accounts
+        dsh_accounts = DshEmailService.from_raw(data_dir / 'email.db', raw_credentials).accounts
         methods = {name: spec for name, spec in methods.items() if name in {
             'list_accounts', 'list_sources', 'get_cursors', 'fetch_messages', 'test_connection', 'list_folders'}}
         methods['list_folders'] = {**methods['list_folders'], 'params': ['account_id']}
