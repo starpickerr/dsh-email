@@ -20,7 +20,7 @@ In a trusted local MCP client, use `save_account` to configure an IMAP account a
 
 ## DSH credential mode
 
-A compatible host can start the service with `--dsh-credentials`, supply accounts using its credential provider and manage the connection. This mode exposes `list_accounts`, `list_sources`, `get_cursors`, `fetch_messages`, `test_connection` and `list_folders`; it does not expose account management or cursor writes. The transient `STELLA_EMAIL_CREDENTIAL` environment entry is removed after parsing. This mode ignores legacy accounts and cannot be combined with `--legacy-dir` or `--hosted-connector`. Do not put real passwords in a shell command. This repository provides the server mode; verify host plugin distribution and compatibility separately.
+A compatible host can start the service with `--dsh-credentials`, supply accounts using its credential provider and manage the connection. This mode exposes `list_accounts`, `list_sources`, `get_cursors`, `fetch_messages`, `test_connection` and `list_folders`; it does not expose account management or cursor writes. The host supplies the transient `ALCOR_EMAIL_CREDENTIAL`; `STELLA_EMAIL_CREDENTIAL` remains a migration fallback. If both are present their raw values must match, otherwise startup fails. Both entries are removed before parsing. This mode ignores legacy accounts and cannot be combined with `--legacy-dir` or `--hosted-connector`. Do not put real passwords in a shell command. This repository provides the server mode; verify host plugin distribution and compatibility separately.
 
 ## Verification
 

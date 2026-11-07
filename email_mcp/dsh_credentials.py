@@ -8,6 +8,14 @@ from .hosts import normalize_imap_host
 from .service import EmailService
 
 
+def take_environment():
+    primary = os.environ.pop('ALCOR_EMAIL_CREDENTIAL', None)
+    legacy = os.environ.pop('STELLA_EMAIL_CREDENTIAL', None)
+    if primary is not None and legacy is not None and primary != legacy:
+        raise ValueError('凭据环境配置冲突。')
+    return primary if primary is not None else legacy
+
+
 class DshEmailService(EmailService):
     def __init__(self, db_path, accounts, **kwargs):
         if not isinstance(accounts, list) or not 1 <= len(accounts) <= 20:
@@ -30,7 +38,10 @@ class DshEmailService(EmailService):
 
     @classmethod
     def from_environment(cls, db_path, **kwargs):
-        raw = os.environ.pop('STELLA_EMAIL_CREDENTIAL', '')
+        return cls.from_raw(db_path, take_environment(), **kwargs)
+
+    @classmethod
+    def from_raw(cls, db_path, raw, **kwargs):
         try:
             value = json.loads(raw)
             if not isinstance(value, dict) or set(value) != {'accounts'}:
