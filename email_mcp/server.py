@@ -4,6 +4,7 @@ import argparse
 import imaplib
 import socket
 import ssl
+import sqlite3
 import asyncio
 import json
 import inspect
@@ -66,6 +67,7 @@ ERROR_MESSAGES = {
     'folder_denied': 'IMAP 已登录，但服务器拒绝读取文件夹。请测试连接并选择服务器返回的文件夹，检查账号的 IMAP 访问权限。',
     'mail_server_error': 'IMAP 服务器未能完成邮件查询。请检查邮箱服务状态及文件夹权限；不能据此认定授权码错误。',
     'network_error': 'IMAP 网络连接失败。请检查网络、DNS、代理与 SSL 端口。',
+    'storage_error': '邮件插件本地数据库操作失败。请检查数据目录权限、磁盘空间及其他实例占用；保留数据库与备份，不要将此错误当作邮箱登录或审批拒绝。',
     'permission_denied': '邮件资源访问或操作系统连接被拒绝。请核对账号的有效资源范围及系统网络权限；此回执不能证明 DSH 审批被拒绝。',
     'account_unavailable': '邮箱账号不存在或已移除。请刷新账号列表并使用实际账号 ID。',
     'invalid_config': '邮箱设置或查询参数无效。请检查账号 ID、启用状态、IMAP 设置及时间范围。',
@@ -87,6 +89,7 @@ def connection_error_code(error, *, query=False):
         (TimeoutError, 'timeout'), (ConnectionRefusedError, 'connection_refused'),
         (imaplib.IMAP4.abort, 'connection_lost'), (imaplib.IMAP4.error, 'mail_server_error' if query else 'auth_failed'),
         (PermissionError, 'permission_denied'), (OSError, 'network_error'),
+        (sqlite3.Error, 'storage_error'),
         (KeyError, 'account_unavailable'), (ValueError, 'invalid_config'),
     ):
         if isinstance(error, kind):
@@ -204,7 +207,11 @@ def create_server(data_dir, legacy_dir=None, user_id="local-default", *, hosted_
             if not dsh_credentials:
                 raise
             if name == 'test_connection':
-                value = {'value': {'connected': False, 'folder_accessible': False, 'error_code': connection_error_code(error)}}
+                code = connection_error_code(error)
+                if code not in ERROR_MESSAGES:
+                    code = 'query_failed'
+                value = {'value': {'connected': False, 'folder_accessible': False,
+                                  'error_code': code, 'message': ERROR_MESSAGES[code]}}
                 return CallToolResult(content=[TextContent(type='text', text=json.dumps(value))], structuredContent=value)
             code = connection_error_code(error, query=True)
             if code not in ERROR_MESSAGES:

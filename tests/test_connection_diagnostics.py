@@ -2,6 +2,7 @@ import imaplib
 import json
 import socket
 import ssl
+import sqlite3
 from unittest.mock import patch
 import pytest
 from email_mcp.server import connection_error_code, ERROR_MESSAGES
@@ -16,6 +17,7 @@ from email_mcp.imap import EmailSource, EmailError, _select_folder
     (imaplib.IMAP4.abort('private-code EOF'),'connection_lost'),
     (imaplib.IMAP4.error('private-code auth'),'auth_failed'),
     (OSError('private-code network'),'network_error'),
+    (sqlite3.OperationalError('private-code storage'),'storage_error'),
     (PermissionError('private-code denied'),'permission_denied'),
     (KeyError('private-code id'),'account_unavailable'),
     (ValueError('private-code config'),'invalid_config'),
