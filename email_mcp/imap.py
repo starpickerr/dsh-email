@@ -23,6 +23,12 @@ from typing import Any
 from .hosts import normalize_imap_host
 
 
+class EmailError(ValueError):
+    def __init__(self, message, *, code):
+        super().__init__(message)
+        self.code = code
+
+
 @dataclass
 class FetchedItem:
     source: str
@@ -125,6 +131,8 @@ def _select_error(folder: str, response, password: str) -> str:
 def _select_folder(client, folder: str, password: str) -> tuple:
     try:
         status, response = client.select(folder, readonly=True)
+    except imaplib.IMAP4.abort:
+        raise
     except imaplib.IMAP4.error as exc:
         status, response = "NO", str(exc)
     return (True, "") if status == "OK" else (False, _select_error(folder, response, password))
@@ -364,7 +372,7 @@ class EmailSource:
             if isinstance(exc, ConnectionRefusedError):
                 raise ValueError("IMAP 服务器拒绝连接，请检查服务器地址、SSL 端口及网络连接。") from None
             if isinstance(exc, imaplib.IMAP4.error):
-                raise ValueError("IMAP 登录失败，请确认邮箱账号和授权码，并检查邮箱服务是否允许 IMAP 访问。") from None
+                raise EmailError("IMAP 登录失败，请确认邮箱账号和授权码，并检查邮箱服务是否允许 IMAP 访问。", code='auth_failed') from None
             if isinstance(exc, OSError):
                 raise ValueError("IMAP 网络连接失败，请检查网络、DNS、代理设置及 SSL 端口。") from None
             raise
@@ -377,7 +385,7 @@ class EmailSource:
             accessible, message = _select_folder(client, cfg["folder"], cfg["password"])
             if not accessible:
                 return {"connected": True, "folder_accessible": False, "folders": folders,
-                        "message": message}
+                        "error_code": "folder_denied", "message": message}
             return {"connected": True, "folder_accessible": True, "folders": folders}
         finally:
             try:
@@ -391,7 +399,7 @@ class EmailSource:
         try:
             accessible, message = _select_folder(client, cfg["folder"], cfg["password"])
             if not accessible:
-                raise ValueError(message)
+                raise EmailError(message, code='folder_denied')
             uidvalidity = _uidvalidity(client)
             last_uid = int(cursors.get("imap_uid") or 0)
             last_validity = cursors.get("imap_uidvalidity") or ""
