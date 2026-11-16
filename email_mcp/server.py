@@ -4,6 +4,7 @@ import argparse
 import imaplib
 import socket
 import ssl
+import sqlite3
 import asyncio
 import json
 import inspect
@@ -17,6 +18,7 @@ from mcp.server.stdio import stdio_server
 from mcp.types import CallToolResult, TextContent, Tool, ToolAnnotations, Request, Result
 from . import __version__
 from .service import EmailService
+from .imap import EmailError
 
 
 class HostedRequest(Request):
@@ -55,9 +57,29 @@ def parameter_schema(name):
     )
 
 
-def connection_error_code(error):
+ERROR_MESSAGES = {
+    'dns_error': 'IMAP 地址解析失败，尚未验证授权码。请检查服务器地址、DNS、代理及网络。',
+    'tls_error': 'IMAP TLS 连接失败。请检查系统时间、SSL 端口、证书及代理，不要关闭证书验证。',
+    'timeout': 'IMAP 连接或读取超时。请检查网络、代理及 SSL 端口；超时不能证明授权码错误或审批被拒绝。',
+    'connection_refused': 'IMAP 服务器拒绝连接。请检查服务器地址、SSL 端口及网络。',
+    'connection_lost': 'IMAP 连接被服务器中断。请检查网络与服务状态后重试。',
+    'auth_failed': 'IMAP 登录被服务器拒绝。请确认已开启 IMAP，并使用有效的客户端授权码。',
+    'folder_denied': 'IMAP 已登录，但服务器拒绝读取文件夹。请测试连接并选择服务器返回的文件夹，检查账号的 IMAP 访问权限。',
+    'mail_server_error': 'IMAP 服务器未能完成邮件查询。请检查邮箱服务状态及文件夹权限；不能据此认定授权码错误。',
+    'network_error': 'IMAP 网络连接失败。请检查网络、DNS、代理与 SSL 端口。',
+    'storage_error': '邮件插件本地数据库操作失败。请检查数据目录权限、磁盘空间及其他实例占用；保留数据库与备份，不要将此错误当作邮箱登录或审批拒绝。',
+    'permission_denied': '邮件资源访问或操作系统连接被拒绝。请核对账号的有效资源范围及系统网络权限；此回执不能证明 DSH 审批被拒绝。',
+    'account_unavailable': '邮箱账号不存在或已移除。请刷新账号列表并使用实际账号 ID。',
+    'invalid_config': '邮箱设置或查询参数无效。请检查账号 ID、启用状态、IMAP 设置及时间范围。',
+    'query_failed': '邮件查询发生未分类错误，未返回完整结果。请检查插件状态与日志，不要推断为审批拒绝或更改授权码。',
+}
+
+
+def connection_error_code(error, *, query=False):
     # Connector exceptions wrap socket/IMAP errors; never publish exception text.
     for _ in range(4):
+        if isinstance(error, EmailError):
+            return error.code
         cause = error.__cause__ or error.__context__
         if cause is None or cause is error:
             break
@@ -65,8 +87,9 @@ def connection_error_code(error):
     for kind, code in (
         (socket.gaierror, 'dns_error'), (ssl.SSLError, 'tls_error'),
         (TimeoutError, 'timeout'), (ConnectionRefusedError, 'connection_refused'),
-        (imaplib.IMAP4.abort, 'connection_lost'), (imaplib.IMAP4.error, 'auth_failed'),
+        (imaplib.IMAP4.abort, 'connection_lost'), (imaplib.IMAP4.error, 'mail_server_error' if query else 'auth_failed'),
         (PermissionError, 'permission_denied'), (OSError, 'network_error'),
+        (sqlite3.Error, 'storage_error'),
         (KeyError, 'account_unavailable'), (ValueError, 'invalid_config'),
     ):
         if isinstance(error, kind):
@@ -184,9 +207,17 @@ def create_server(data_dir, legacy_dir=None, user_id="local-default", *, hosted_
             if not dsh_credentials:
                 raise
             if name == 'test_connection':
-                value = {'value': {'connected': False, 'folder_accessible': False, 'error_code': connection_error_code(error)}}
+                code = connection_error_code(error)
+                if code not in ERROR_MESSAGES:
+                    code = 'query_failed'
+                value = {'value': {'connected': False, 'folder_accessible': False,
+                                  'error_code': code, 'message': ERROR_MESSAGES[code]}}
                 return CallToolResult(content=[TextContent(type='text', text=json.dumps(value))], structuredContent=value)
-            return CallToolResult(isError=True, content=[TextContent(type='text', text='邮件查询失败，请检查 DSH 邮件插件中的账号、授权码、IMAP 权限和网络。')])
+            code = connection_error_code(error, query=True)
+            if code not in ERROR_MESSAGES:
+                code = 'query_failed'
+            return CallToolResult(isError=True, content=[TextContent(type='text', text=json.dumps(
+                {'error_code': code, 'message': ERROR_MESSAGES[code]}, ensure_ascii=False))])
         except BaseException:
             cancel.set()
             raise

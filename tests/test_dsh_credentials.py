@@ -67,11 +67,11 @@ class DshMailWireTest(unittest.IsolatedAsyncioTestCase):
     async def test_connection_failure_is_structured_and_never_returns_server_secrets(self):
         root = Path(__file__).resolve().parents[1]
         script = """import asyncio,imaplib
-from email_mcp.imap import EmailSource
+from email_mcp.imap import EmailSource, EmailError
 from email_mcp.server import main
 def denied(self):
     try: raise imaplib.IMAP4.error('LOGIN private-server-secret rejected')
-    except imaplib.IMAP4.error as cause: raise ValueError('wrapped private-server-secret') from cause
+    except imaplib.IMAP4.error as cause: raise EmailError('wrapped private-server-secret', code='auth_failed') from cause
 EmailSource._connect=denied
 asyncio.run(main())
 """
@@ -84,7 +84,15 @@ asyncio.run(main())
                     await asyncio.wait_for(session.initialize(), 10)
                     result = await session.call_tool('test_connection', {'payload': {'id': ACCOUNT['id']}})
                     self.assertFalse(result.isError)
-                    self.assertEqual(result.structuredContent['value'], {'connected': False, 'folder_accessible': False, 'error_code': 'auth_failed'})
+                    self.assertEqual(result.structuredContent['value'], {'connected': False, 'folder_accessible': False,
+                        'error_code': 'auth_failed', 'message': 'IMAP 登录被服务器拒绝。请确认已开启 IMAP，并使用有效的客户端授权码。'})
+                    self.assertNotIn('private-server-secret', result.model_dump_json())
+                    self.assertNotIn(ACCOUNT['password'], result.model_dump_json())
+                    result = await session.call_tool('list_folders', {'account_id': ACCOUNT['id']})
+                    self.assertTrue(result.isError)
+                    detail = json.loads(result.content[0].text)
+                    self.assertEqual(detail['error_code'], 'auth_failed')
+                    self.assertIn('IMAP', detail['message'])
                     self.assertNotIn('private-server-secret', result.model_dump_json())
                     self.assertNotIn(ACCOUNT['password'], result.model_dump_json())
 
