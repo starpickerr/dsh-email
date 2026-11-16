@@ -2,10 +2,11 @@ import imaplib
 import json
 import socket
 import ssl
+import sqlite3
 from unittest.mock import patch
 import pytest
-from email_mcp.server import connection_error_code
-from email_mcp.imap import EmailSource
+from email_mcp.server import connection_error_code, ERROR_MESSAGES
+from email_mcp.imap import EmailSource, EmailError, _select_folder
 
 
 @pytest.mark.parametrize(('error','expected'),[
@@ -16,6 +17,7 @@ from email_mcp.imap import EmailSource
     (imaplib.IMAP4.abort('private-code EOF'),'connection_lost'),
     (imaplib.IMAP4.error('private-code auth'),'auth_failed'),
     (OSError('private-code network'),'network_error'),
+    (sqlite3.OperationalError('private-code storage'),'storage_error'),
     (PermissionError('private-code denied'),'permission_denied'),
     (KeyError('private-code id'),'account_unavailable'),
     (ValueError('private-code config'),'invalid_config'),
@@ -31,3 +33,18 @@ def test_wrapped_connector_error_keeps_the_original_failure_kind():
         with pytest.raises(ValueError) as failure:
             EmailSource(host='imap.example.com',user='synthetic@example.com',password='private-code',port=993,folder='INBOX')._connect()
     assert connection_error_code(failure.value)=='dns_error'
+
+
+def test_query_errors_do_not_misidentify_folder_or_protocol_failure_as_login():
+    assert connection_error_code(EmailError('private-code', code='folder_denied'), query=True) == 'folder_denied'
+    assert connection_error_code(imaplib.IMAP4.error('private-code SEARCH failed'), query=True) == 'mail_server_error'
+    assert connection_error_code(EmailError('private-code', code='auth_failed'), query=True) == 'auth_failed'
+    assert all(len(message) > 20 and 'private-code' not in message for message in ERROR_MESSAGES.values())
+
+
+def test_folder_connection_abort_is_not_reported_as_folder_permission():
+    from unittest.mock import Mock
+    client = Mock()
+    client.select.side_effect = imaplib.IMAP4.abort('private-code EOF')
+    with pytest.raises(imaplib.IMAP4.abort):
+        _select_folder(client, 'INBOX', 'private-code')

@@ -31,3 +31,9 @@ Run the offline credential-mode tests with:
 ```
 
 These tests use synthetic accounts. Actual mailbox access requires user authorization, correct IMAP settings and a reachable provider; an offline test does not validate a real account.
+
+## 错误诊断
+
+DSH 凭据模式的查询失败回执为 `error_code` 和固定的安全 `message`，区分 DNS、TLS、超时、网络中断、登录拒绝、登录后的文件夹拒绝、IMAP 查询失败、资源范围及配置问题。原始服务器异常和凭据不会作为查询错误回传。`test_connection` 保持既有结构化状态契约；登录成功但文件夹不可读时返回 `folder_denied`。
+
+网络错误不能证明授权码错误，也不能证明 DSH 审批拒绝。修复网络、代理或具体邮箱设置后再查询，不要求用户更改审批策略。
