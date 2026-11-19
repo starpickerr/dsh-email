@@ -1,5 +1,7 @@
 # dsh-email
 
+**DSH 插件** · 邮件也可作为原生 DSH 插件独立安装，安装与开发说明见 [plugin/README.md](plugin/README.md)。
+
 An independent local stdio MCP server for multiple IMAP accounts. It provides account and source configuration, mailbox queries and consumer-controlled cursors. IMAP selection is read-only; the server does not provide SMTP sending or message deletion. The capability description is distributed in `email_mcp/capability.json`.
 
 ## Install and start
