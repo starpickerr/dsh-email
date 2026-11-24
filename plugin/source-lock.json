@@ -4,7 +4,7 @@
   "package": "alcor-mail",
   "binary": "email-mcp",
   "version": "1.0.7",
-  "sourceRevision": "fd0bd2b087e17e363c8bbc4359ad17bbf4e18367",
+  "sourceRevision": "80a288db5d4648772d4566b29f3845d984fa2291",
   "sourceSha256": "34f24878981df30ae96c1ba6e87ac208e86144f1beb0ad68e3f887143501835e",
   "dependencies": {
     "mcp": "1.30.0",
