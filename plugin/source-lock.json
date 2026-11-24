@@ -5,7 +5,7 @@
   "binary": "email-mcp",
   "version": "1.0.7",
   "sourceRevision": "fd0bd2b087e17e363c8bbc4359ad17bbf4e18367",
-  "sourceSha256": "baa326c520685105e561b46bc83d1552c99399f3b732776ec978ed7b8b3d62f8",
+  "sourceSha256": "34f24878981df30ae96c1ba6e87ac208e86144f1beb0ad68e3f887143501835e",
   "dependencies": {
     "mcp": "1.30.0",
     "PyInstaller": "6.22.3"
