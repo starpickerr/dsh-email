@@ -111,7 +111,9 @@ class EmailService:
                     raise
                 continue
             try:
-                os.fchmod(fd, 0o600)
+                # Windows uses the ACL inherited from the Profile directory.
+                if os.name != "nt":
+                    os.fchmod(fd, 0o600)
             finally:
                 os.close(fd)
         db = sqlite3.connect(str(self.db_path), timeout=10)
